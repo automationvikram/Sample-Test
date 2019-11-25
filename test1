@@ -1,2 +1,41 @@
-sample test
-x=10
+Legion | gatling based framework demo
+
+Simple showcase of a maven project using the gatling-maven-plugin.
+
+To test it out, simply execute the following command:
+
+$mvn gatling:test -Dgatling.simulationClass=computerdatabase.SimulationName
+or simply:
+
+$mvn gatling:test
+Place all your payload requests for different requests in different txt files under Resources/data folder
+
+Place all your data files (csv format) also under resources/data folder
+
+Variables Usage:
+
+- In Jenkins, we can parametrize the job and add as many parameters as required. For example, ivr_users is the paramater name in Jenkins which is being passed as
+    ivrUsers to our Gatling test
+    clean gatling:test -DivrUsers=$ivr_users -DdbpUsers=$dbp_users -DuhcUsers=$myUHC_users
+- Now in our pom.xml, we will be referring to these variables via user defined variables as shown below:
+    <jvmArgs>
+              <jvmArg>-Divrusers=${ivrUsers}</jvmArg>
+              <jvmArg>-Ddbpusers=${dbpUsers}</jvmArg>
+              <jvmArg>-Duhcusers=${uhcUsers}</jvmArg>
+    </jvmArgs>
+- We will then reference to these variables in our scala scripts as shown below:
+     val ivrUsrCnt: Int = System.getProperty("ivrusers").toInt
+Data from csv need to be used via feeder in the respective scenario and will be used within payload (txt file) as ${var name}
+
+This is a base project for reference. Please refrain from making any changes to this project. Clone this project for your requirement
+
+How to use this project?
+
+- Clone this project to your local
+- Make required updates to the project as per instructions mentioned previously
+- Try executing in your local
+    * while executing in local, please replace the variable values with static values for testing and execution purpose
+    * once it gets passed in your local, please revert the changes made in the previous step
+    * Make a remote repo on Github for your project
+    * Push your project to the project created in the previous step rather than trying pushing it to this base project
+    * Feel free to create different branches to your project as required
