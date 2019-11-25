@@ -1,0 +1,101 @@
+/*
+ * Copyright 2011-2019 GatlingCorp (https://gatling.io)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+
+ * Total Users: 200
+ * Each hitting ,multiple services multiple times concurrently
+ * Three such applications with different user count and services
+ */
+
+package computerdatabase
+
+import io.gatling.core.Predef._
+import io.gatling.http.Predef._
+import scala.concurrent.duration._
+
+//name of simulation should be unique. this is the format "class ______ extends Simulation"
+class FXISimulation extends Simulation {
+
+  //here only 5 variables are being used as passed from Jenkins but it can be customized to handle any number of variables
+  val ivrUsrCnt: Int = System.getProperty("ivrusers").toInt //fetching variable value from pom.xml where we are refering the variables to values from Jenkins
+  val dbpUsrCnt: Int = System.getProperty("dbpusers").toInt
+  val uhcUsrCnt: Int = System.getProperty("uhcusers").toInt
+  val ramptime:  Int = System.getProperty("ramptime").toInt
+  val url: String    = System.getProperty("url").toString
+
+  //assigning base URL to a variable. we define the .baseURL() that will be prepended to all HTTP requests.
+  val httpProtocol = http.baseUrl(url)
+
+  //defining header for our http request. We can have multiple headers if our requests need different headers
+val header = Map(
+   "Content-Type" -> "application/soap+xml;charset=UTF-8",
+    "Connection" -> "alive",
+    "User-agent" -> "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:16.0) Gecko/20100101 Firefox/16.0")
+
+  //referencing to the data sheet stored in resources/data folder. 'circular' is used so that our test loops over the data as soon as it reaches the end of file
+  //data has to be saved in csv format, so one sheet per file.
+val data = csv("test.csv").circular
+
+  //defining object here to address our requests
+object payload_myUHC{
+
+    // On line 1 of the following declaration, we first declare a value called “pl1“. We assign it the “scenario” (which is from the Scala DSL) and name it “DentalBenefit”
+    // On line 2 we call the .feed() method. We supply it with “data” which we have declared initially to feed data to our scenario
+    // On line 3 we call the .exec() method.(again from the Scala DSL) and name it “myUHC_dentalbenefitsandaccums”. This is what the transaction will be called in the test report.
+    // On line 4 we execute the .post() method and supply the endpoint to call. The full endpoint called here will be: “http://(baseUrl)/FacetsWebServiceLibrary/FaWebServiceBroker.asmx”
+    // On line 5 we are consuming the header as specified in the beginning
+    // On line 6, we are passing payload to this scenario which is actually stored as txt file
+
+val pl1 = scenario("DentalBenefit")
+  .feed(data)
+  .exec(http("myUHC_dentalbenefitsandaccums")
+  .post("/FacetsWebServiceLibrary/FaWebServiceBroker.asmx")
+	.headers(header)
+	.body(ElFileBody("dentalandaccum_payload.txt")))
+
+
+    //in similar fashion, we can create scenarios for other requests too, if multiple requests are involved.
+    //if there is a requirement where two services get executed back to back, it's possible using exec right after the first exec, so basically in sequence
+    //user can even add pause(10 seconds) in between the two requests, if required
+
+val pl2 = scenario("DentalClaim").feed(data2).exec(http("myUHC_dental claims")
+  .exec(http("myUHC_dental claims")
+  .post("/FacetsWebServiceLibrary/FaWebServiceBroker.asmx")
+	.headers(header)
+	.body(ElFileBody("dentalclaim_payload.txt")))
+
+
+  // example of sequential request call below
+val pl3 = scenario("UHOneFXI").exec(http("EHubLoad")
+      .post("8557/api/enrollment/application/v1.0/receiveeapp")
+      .headers(header)
+      .body(ElFileBody("ehub.txt")).check( regex( "(?<=<SubscriberID>)(.*\\n?)(?=</SubscriberID>)").saveAs("subid"))) //extracting value from response body and saving it as a session variable
+      //element captured above and saved as subid is being used in the request for next service in the payload txt file for the respective request
+      .pause(300.milliseconds)   //adding a pause before the execution of next sequential service request
+      .exec(http("BRLoad")
+        .post("8558/api/enrollment/application/v1.0/validatebruleeeapp")
+        .headers(header)
+        .body(ElFileBody("brload.txt")))
+
+}
+
+  //rampusers defines the number of users we want ramp up to in a given time - ramptime. httpProtocol is the baseurl defined in the beginning of this script.
+  //multiple scenarios which are getting executed here are separated by comma.
+  //all the scenarios separated by comm here are going to get executed in parallel
+  //there are multiple ways this similation can be setup for execution. Please refer to link - https://gatling.io/docs/2.3/general/simulation_setup/
+
+setUp(pl1.inject(rampUsers(dbpUsrCnt) during (ramptime)).protocols(httpProtocol),
+      pl2.inject(rampUsers(dbpUsrCnt) during (ramptime)).protocols(httpProtocol),
+      pl3.inject(rampUsers(dbpUsrCnt) during (ramptime)).protocols(httpProtocol)
+}
