@@ -1,0 +1,91 @@
+package computerdatabase
+
+import java.io.File
+import java.io.PrintWriter
+import java.io.FileOutputStream
+import io.gatling.core.Predef._
+import io.gatling.http.Predef._
+import scala.concurrent.duration._
+import io.gatling.jdbc.Predef._
+//import dev.code_n_roll.gatling.jdbc.Predef._
+import io.gatling.core.feeder._
+import io.gatling.core.config.GatlingConfiguration
+import io.gatling.core.structure.ScenarioBuilder
+import io.gatling.http.protocol.HttpProtocolBuilder
+import io.gatling.core.feeder.SourceFeederBuilder
+//import io.gatling.core.feeder.RecordSeqFeederBuilder
+//import com.optum.jarvis.simulations.BaseClass
+//import io.gatling.jdbc.gatling 
+import de.codecentric.gatling.jdbc.Predef._
+import de.codecentric.gatling.jdbc.builder.column.ColumnHelper._
+
+
+class sampleJDBC extends Simulation {
+
+  val s1 = new File("src/test/resources/data/extractOP.csv")
+  val csvHeader: StringBuffer = new StringBuffer("")
+  val csvData: StringBuffer = new StringBuffer("")
+  csvHeader.append("ReqID,Value\n")
+  val url: String    = "https:abc.com:8443"
+  
+  private val dbConnectionString = "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcps)(HOST=1.1.1.1)(PORT=101001))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=abcdef)))"
+  private val sqlQuery = "SELECT x FROM tablename WHERE TRUNC(CREATE_DATE) = '01-Apr-2017'"
+  private val sqlUserName = "abcName"
+  private val sqlPassword = "Welcome"
+  private val message = "${DCN}"
+  
+  private val dbConnectionString2 = "jdbc:jtds:sqlserver://abc.ms.com:1433/xts"
+  private val sqlQuery2 = "SELECT abc FROM META_DATA"
+  private val sqlUserName2 = "abc"
+  private val sqlPassword2 = "def"
+  private val message2 = "${DCN}"
+  
+  
+  //val sqlQueryFeeder: RecordSeqFeederBuilder[String] = jdbcFeeder(dbConnectionString,
+//  val sqlQueryFeeder: SourceFeederBuilder[Any] = jdbcFeeder(dbConnectionString,
+//   sqlUserName,
+//   sqlPassword,
+//   sqlQuery
+// )
+ 
+  val sqlQueryFeeder2: SourceFeederBuilder[Any] = jdbcFeeder(dbConnectionString2,
+   sqlUserName2,
+   sqlPassword2,
+   sqlQuery2
+ ) 
+
+   val jdbcConfig = jdbc
+  .url("jdbc:jtds:sqlserver://abc.ms.ds.uhc.com:1433/xts")
+  .username("abc")
+  .password("def")
+  .driver("net.sourceforge.jtds.jdbc.Driver")
+  
+  val httpProtocol = http.baseUrl(url)
+  
+  val header = Map(
+   "Content-Type" -> "application/soap+xml;charset=UTF-8",
+    "Connection" -> "alive",
+    "User-agent" -> "Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko") //-----For Internet Explorer
+	 
+      //defining object here to address our requests
+	object payload_myUHC{
+	
+	val pl1 = scenario("ExtractData")
+	  .feed(sqlQueryFeeder2)
+	  .exec(http("Get_Obj_Id")
+	  .post("https://abc.cishoc.com:8443/wsi/DEF/")
+		.headers(header)
+		.check(status.is(200))
+		.body(ElFileBody("extract.txt")).check( regex( "(?<=<Value>)(.*\\n?)(?=</Value>)").saveAs("Id")))
+	  .exec (session => {
+	    val Id = session("Id").as[String].trim
+	    session.set("Id", Id)})
+	  .exec(jdbc("insertion")
+			  .insert()
+			  .into("FILENET_META_DATA (FILENET_OBJECT_ID)")
+			  .values("'$Id'"))
+	  }
+	  
+	  setUp(payload_myUHC.pl1.inject(constantUsersPerSec(10) during(15 seconds)).protocols(jdbcConfig))
+  
+}
